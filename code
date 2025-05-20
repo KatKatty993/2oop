@@ -1,0 +1,820 @@
+#include <iostream>
+#include <string>
+#include <cmath>
+#include <sstream>      // Для створення рядків через потік
+#include <memory>       // Для роботи з smart pointer (unique_ptr)
+
+using namespace std;
+
+const double PI = 3.141592;
+
+// Базовий клас, який представляє загальну фігуру
+class Shape {
+protected:
+    string name;              // Назва фігури
+    double sideLength;        // Довжина сторони або радіус фігури
+    int sidesCount;           // Кількість сторін
+    int numOfVertices;        // Кількість вершин
+    double area;              // Площа
+    double radiusInscribed;   // Радіус вписаного кола
+    double radiusDescribed;   // Радіус описаного кола
+    static int objectCount;   // Статичний лічильник створених об'єктів
+
+public:
+    // Конструктор, ініціалізує значення та збільшує лічильник об'єктів
+    Shape(double length) : sideLength(max(0.0, length)), name("Undefined"), 
+        sidesCount(0), numOfVertices(0), area(0), radiusInscribed(0), radiusDescribed(0) {
+        objectCount++;
+    }
+    
+    // Віртуальний деструктор, зменшує лічильник при знищенні об'єкта
+    virtual ~Shape() { objectCount--; }
+    
+    // Метод, який повертає інформацію про фігуру у вигляді рядка
+    virtual string toString() const {
+        ostringstream ss;
+        ss << "\nName: " << name << "\nSide Length: " << sideLength 
+           << "\nSides: " << sidesCount << "\nVertices: " << numOfVertices
+           << "\nArea: " << area;
+        return ss.str();
+    }
+
+    // Гетери (доступ до властивостей фігури)
+    string getName() const { return name; }
+    int getSidesCount() const { return sidesCount; }
+    int getVerticesCount() const { return numOfVertices; }
+    double getSideLength() const { return sideLength; }
+    double getArea() const { return area; }
+    double getInscribedRadius() const { return radiusInscribed; }
+    double getDescribedRadius() const { return radiusDescribed; }
+
+    // Чисто віртуальні методи-сетери, що реалізуються в похідних класах
+    virtual void setSideLength(double val) = 0;
+    virtual void setArea(double val) = 0;
+    virtual void setInscribedRadius(double val) = 0;
+    virtual void setDescribedRadius(double val) = 0;
+};
+
+int Shape::objectCount = 0; // Ініціалізація статичної змінної
+
+// Клас для плоских (2D) фігур, наслідує Shape
+class FlatShape : public Shape {
+protected:
+    double perimeter;
+
+public:
+    FlatShape(double length) : Shape(length), perimeter(0) {}
+
+    // Додатковий опис для 2D фігур (периметр, радіуси)
+    string toString() const override {
+        ostringstream ss;
+        ss << Shape::toString() << "\nPerimeter: " << perimeter
+           << "\nInscribed Radius: " << radiusInscribed 
+           << "\nDescribed Radius: " << radiusDescribed;
+        return ss.str();
+    }
+
+    // Гетер для периметра
+    double getPerimeter() const { return perimeter; }
+
+    // Абстрактний метод для встановлення периметра
+    virtual void setPerimeter(double val) = 0;
+};
+
+// Клас для об’ємних (3D) фігур, наслідує Shape
+class VolumeShape : public Shape {
+protected:
+    double volume;           // Об’єм фігури
+    int numFaces;            // Кількість граней
+    int facesPerVertex;      // Скільки граней з’єднуються у вершині
+    int sidesPerFace;        // Скільки сторін має одна грань
+
+public:
+    VolumeShape(double length) : Shape(length), volume(0), numFaces(0), 
+        facesPerVertex(0), sidesPerFace(0) {}
+
+    // Опис 3D фігури
+    string toString() const override {
+        ostringstream ss;
+        ss << Shape::toString() << "\nVolume: " << volume 
+           << "\nFaces: " << numFaces << "\nFaces per Vertex: " << facesPerVertex
+           << "\nSides per Face: " << sidesPerFace;
+        return ss.str();
+    }
+
+    // Гетер для об'єму
+    double getVolume() const { return volume; }
+
+    // Повертає фігуру-грань (наприклад, квадрат у куба)
+    virtual unique_ptr<FlatShape> getFaceShape() const = 0;
+
+    // Метод для встановлення об'єму
+    virtual void setVolume(double val) = 0;
+};
+
+// Клас для квадрату
+class Rectangle : public FlatShape {
+public:
+    Rectangle(double length) : FlatShape(length) {
+        name = "Rectangle";
+        sidesCount = numOfVertices = 4;
+        updateProperties(); // Оновлюємо площу, периметр, радіуси
+    }
+
+    // Встановлення сторони з перевіркою
+    void setSideLength(double val) override {
+        sideLength = max(0.0, val);
+        updateProperties();
+    }
+
+    // Обчислення сторони з площі
+    void setArea(double val) override {
+        if (val >= 0) setSideLength(sqrt(val));
+    }
+
+    // Обчислення сторони з периметра
+    void setPerimeter(double val) override {
+        if (val >= 0) setSideLength(val / sidesCount);
+    }
+
+    // Встановлення сторони через вписане коло
+    void setInscribedRadius(double val) override {
+        if (val >= 0) setSideLength(val * 2);
+    }
+
+    // Встановлення сторони через описане коло
+    void setDescribedRadius(double val) override {
+        if (val >= 0) setSideLength(val * sqrt(2));
+    }
+
+private:
+    // Допоміжна функція для перерахунку всіх характеристик
+    void updateProperties() {
+        area = pow(sideLength, 2);
+        perimeter = sideLength * sidesCount;
+        radiusInscribed = sideLength / 2;
+        radiusDescribed = sideLength * sqrt(2) / 2;
+    }
+};
+
+// Клас реалізує правильний (рівносторонній) трикутник
+class EquilateralTriangle : public FlatShape {
+public:
+        // Конструктор, приймає довжину сторони
+        EquilateralTriangle(double length) : FlatShape(length) {
+            name = "Equilateral Triangle";
+            sidesCount = numOfVertices = 3; 
+            updateProperties(); // Обчислюємо площу, периметр, радіуси
+        }
+    
+        // Встановлення довжини сторони з перевіркою, що вона не менша за 0
+        void setSideLength(double val) override {
+            sideLength = max(0.0, val);
+            updateProperties();
+        }
+    
+        // Встановлення площі: обернена формула до площі рівностороннього трикутника:
+        void setArea(double val) override {
+            if (val >= 0) setSideLength(sqrt((4 * val) / sqrt(3)));
+        }
+    
+        // Встановлення периметра
+        void setPerimeter(double val) override {
+            if (val >= 0) setSideLength(val / sidesCount);
+        }
+    
+        // Вписаний радіус
+        void setInscribedRadius(double val) override {
+            if (val >= 0) setSideLength(3 * val);
+        }
+    
+        // Описаний радіус
+        void setDescribedRadius(double val) override {
+            if (val >= 0) setSideLength(val * sqrt(3));
+        }
+    
+private:
+        // Метод оновлює всі властивості трикутника на основі довжини сторони
+        void updateProperties() {
+            area = (sqrt(3) / 4) * pow(sideLength, 2); 
+            perimeter = sideLength * sidesCount;      
+            radiusInscribed = sideLength / (2 * sqrt(3)); 
+            radiusDescribed = sideLength / sqrt(3);       
+        }
+};    
+
+// Клас реалізує правильний шестикутник 
+class RegularHexagon : public FlatShape {
+public:
+        RegularHexagon(double length) : FlatShape(length) {
+            name = "Regular Hexagon";
+            sidesCount = numOfVertices = 6;
+            updateProperties();
+        }
+    
+        void setSideLength(double val) override {
+            sideLength = max(0.0, val);
+            updateProperties();
+        }
+    
+        // Площа
+        void setArea(double val) override {
+            if (val >= 0) setSideLength(sqrt((2 * val) / (3 * sqrt(3))));
+        }
+    
+        // Периметр
+        void setPerimeter(double val) override {
+            if (val >= 0) setSideLength(val / sidesCount);
+        }
+    
+        // Вписаний радіус 
+        void setInscribedRadius(double val) override {
+            if (val >= 0) setSideLength(val);
+        }
+    
+        // Описаний радіус
+        void setDescribedRadius(double val) override {
+            if (val >= 0) setSideLength(2 * val / sqrt(3));
+        }
+    
+private:
+        void updateProperties() {
+            area = (3 * sqrt(3) / 2) * pow(sideLength, 2);
+            perimeter = sideLength * sidesCount;
+            radiusInscribed = sideLength;
+            radiusDescribed = sideLength * sqrt(3) / 2;
+        }
+};
+    
+
+// Об'ємна фігура: куля (сфера), визначається за радіусом
+class Sphere : public VolumeShape {
+public:
+        Sphere(double length) : VolumeShape(length) {
+            name = "Sphere";
+            sidesCount = 0; // Немає сторін
+            numOfVertices = 0;
+            numFaces = 1; // Суцільна поверхня
+            updateProperties();
+        }
+    
+        // Радіус
+        void setSideLength(double val) override {
+            sideLength = max(0.0, val);
+            updateProperties();
+        }
+    
+        // Площа поверхні
+        void setArea(double val) override {
+            if (val >= 0) setSideLength(sqrt(val / (4 * PI)));
+        }
+    
+        // Об'єм
+        void setVolume(double val) override {
+            if (val >= 0) setSideLength(cbrt((3 * val) / (4 * PI)));
+        }
+    
+        // Вписаний та описаний радіуси у кулі — це сам радіус
+        void setInscribedRadius(double val) override {
+            if (val >= 0) setSideLength(val);
+        }
+    
+        void setDescribedRadius(double val) override {
+            if (val >= 0) setSideLength(val);
+        }
+    
+        // Сфера не має плоских граней
+        unique_ptr<FlatShape> getFaceShape() const override {
+            return nullptr;
+        }
+    
+private:
+        void updateProperties() {
+            area = 4 * PI * pow(sideLength, 2); // Поверхнева площа
+            volume = (4.0 / 3.0) * PI * pow(sideLength, 3); // Об'єм
+            radiusInscribed = radiusDescribed = sideLength;
+        }
+};    
+    
+// Правильний октаедр
+class Octahedron : public VolumeShape {
+public:
+        Octahedron(double length) : VolumeShape(length) {
+            name = "Octahedron";
+            sidesCount = 12;
+            numOfVertices = 6;
+            numFaces = 8;
+            facesPerVertex = 4;
+            sidesPerFace = 3; 
+            updateProperties();
+        }
+    
+        void setSideLength(double val) override {
+            sideLength = max(0.0, val);
+            updateProperties();
+        }
+    
+        // Площа
+        void setArea(double val) override {
+            if (val >= 0) setSideLength(sqrt(val / (2 * sqrt(3))));
+        }
+    
+        // Об'єм
+        void setVolume(double val) override {
+            if (val >= 0) setSideLength(cbrt((3 * val) / sqrt(2)));
+        }
+    
+        void setInscribedRadius(double val) override {
+            if (val >= 0) setSideLength(val * sqrt(6));
+        }
+    
+        void setDescribedRadius(double val) override {
+            if (val >= 0) setSideLength(val * sqrt(2));
+        }
+    
+        // Кожна грань — рівносторонній трикутник
+        unique_ptr<FlatShape> getFaceShape() const override {
+            return unique_ptr<FlatShape>(new EquilateralTriangle(sideLength));
+        }
+    
+private:
+        void updateProperties() {
+            area = 2 * sqrt(3) * pow(sideLength, 2);
+            volume = (1.0 / 3.0) * sqrt(2) * pow(sideLength, 3);
+            radiusInscribed = (sideLength * sqrt(6)) / 6;
+            radiusDescribed = (sideLength * sqrt(2)) / 2;
+        }
+};
+    
+class RegularPentagon : public FlatShape {
+public:
+        RegularPentagon(double length) : FlatShape(length) {
+            name = "Regular Pentagon";
+            sidesCount = numOfVertices = 5;
+            updateProperties();
+        }
+        
+        void setSideLength(double val) override {
+            sideLength = max(0.0, val);
+            updateProperties();
+        }
+        
+        // Формула площі для правильного п’ятикутника
+        void setArea(double val) override {
+        if (val >= 0) setSideLength(sqrt((4 * val) / (5 * sqrt(5 + 2 * sqrt(5)))));
+        }
+        
+        void setPerimeter(double val) override {
+        if (val >= 0) setSideLength(val / sidesCount);
+        }
+        
+        // Формули для радіусів вписаного й описаного кіл
+        void setInscribedRadius(double val) override {
+            if (val >= 0) setSideLength(2 * val * tan(PI / sidesCount));
+        }
+        
+        void setDescribedRadius(double val) override {
+            if (val >= 0) setSideLength(2 * val * sin(PI / sidesCount));
+        }
+        
+private:
+        void updateProperties() {
+            double angle = PI / sidesCount;
+            area = (5.0 / 4.0) * pow(sideLength, 2) / tan(angle);
+            perimeter = sideLength * sidesCount;
+            radiusInscribed = sideLength / (2 * tan(angle));
+            radiusDescribed = sideLength / (2 * sin(angle));
+        }
+};
+        
+
+class Circle : public FlatShape {
+public:
+        Circle(double radius) : FlatShape(radius) {
+            name = "Circle";
+            sideLength = radius;            // У цьому контексті sideLength — це радіус кола
+            sidesCount = 0;
+            numOfVertices = 0;
+            updateProperties();             // Розрахунок площі, периметра та радіусів
+        }
+            
+        // Встановити радіус (як sideLength)
+        void setSideLength(double val) override {
+            sideLength = max(0.0, val);     // Захист від від’ємних значень
+            updateProperties();             // Перерахунок параметрів
+        }
+            
+        // Задати площу — розраховується відповідний радіус
+        void setArea(double val) override {
+            if (val >= 0) setSideLength(sqrt(val / PI));
+        }
+            
+        // Задати периметр (довжину кола) — обчислюється радіус
+        void setPerimeter(double val) override {
+            if (val >= 0) setSideLength(val / (2 * PI));
+        }
+            
+        // Встановити вписаний радіус (для кола він дорівнює радіусу)
+        void setInscribedRadius(double val) override {
+            setSideLength(val);             // У випадку кола вписаний = радіус
+        }
+            
+        // Встановити описаний радіус (також просто радіус кола)
+        void setDescribedRadius(double val) override {
+            setSideLength(val);             // У кола описаний = радіус
+        }
+            
+private:
+        // Оновити всі параметри фігури на основі радіуса
+        void updateProperties() {
+            area = PI * pow(sideLength, 2);              // Розрахунок площі
+            perimeter = 2 * PI * sideLength;             // Розрахунок довжини кола
+            radiusInscribed = radiusDescribed = sideLength; // Обидва радіуси — це сам радіус
+        }
+};         
+
+// Клас для правильного n-кутника
+class RegularPolygon : public FlatShape {
+private:
+        int n; // кількість сторін
+    
+        // Оновлює всі властивості фігури на основі довжини сторони
+        void updateProperties() {
+            if (n < 3 || sideLength <= 0) {
+                area = perimeter = radiusInscribed = radiusDescribed = 0;
+                return;
+            }
+    
+            double angle = PI / n; // центральний кут
+            perimeter = n * sideLength;
+    
+            // Площа правильного n-кутника
+            area = (n * pow(sideLength, 2)) / (4 * tan(angle));
+    
+            // Радіус вписаного кола
+            radiusInscribed = sideLength / (2 * tan(angle));
+    
+            // Радіус описаного кола
+            radiusDescribed = sideLength / (2 * sin(angle));
+        }
+    
+public:
+        // Конструктор з параметрами: довжина сторони та кількість сторін
+        RegularPolygon(double length, int sides) : FlatShape(length), n(max(3, sides)) {
+            name = "Regular " + to_string(n) + "-gon";
+            sidesCount = numOfVertices = n;
+            updateProperties();
+        }
+    
+        // Сеттер для довжини сторони
+        void setSideLength(double val) override {
+            sideLength = max(0.0, val);
+            updateProperties();
+        }
+    
+        void setArea(double val) override {
+            if (val > 0) {
+                double angle = PI / n;
+                sideLength = sqrt((4 * val * tan(angle)) / n);
+                updateProperties();
+            }
+        }
+    
+        void setPerimeter(double val) override {
+            if (val >= 0) {
+                sideLength = val / n;
+                updateProperties();
+            }
+        }
+    
+        void setInscribedRadius(double val) override {
+            if (val >= 0) {
+                double angle = PI / n;
+                sideLength = 2 * val * tan(angle);
+                updateProperties();
+            }
+        }
+    
+        void setDescribedRadius(double val) override {
+            if (val >= 0) {
+                double angle = PI / n;
+                sideLength = 2 * val * sin(angle);
+                updateProperties();
+            }
+        }
+};
+    
+// Клас куба — наслідує VolumeShape
+class Cube : public VolumeShape {
+public:
+    Cube(double length) : VolumeShape(length) {
+        name = "Cube";
+        sidesCount = 12;
+        numOfVertices = 8;
+        numFaces = 6;
+        facesPerVertex = 3;
+        sidesPerFace = 4;
+        updateProperties(); // Перерахунок властивостей
+    }
+
+    void setSideLength(double val) override {
+        sideLength = max(0.0, val);
+        updateProperties();
+    }
+
+    void setArea(double val) override {
+        if (val >= 0) setSideLength(sqrt(val / 6));
+    }
+
+    void setVolume(double val) override {
+        if (val >= 0) setSideLength(cbrt(val));
+    }
+
+    void setInscribedRadius(double val) override {
+        if (val >= 0) setSideLength(val * 2);
+    }
+
+    void setDescribedRadius(double val) override {
+        if (val >= 0) setSideLength(val * 2 / sqrt(3));
+    }
+
+    // Повертає квадрат — грань куба
+    unique_ptr<FlatShape> getFaceShape() const override {
+        return unique_ptr<FlatShape>(new Rectangle(sideLength));
+    }
+
+private:
+    // Оновлення всіх геометричних параметрів
+    void updateProperties() {
+        area = 6 * pow(sideLength, 2);
+        volume = pow(sideLength, 3);
+        radiusInscribed = sideLength / 2;
+        radiusDescribed = sideLength * sqrt(3) / 2;
+    }
+};
+
+class Tetrahedron : public VolumeShape {
+public:
+        Tetrahedron(double length) : VolumeShape(length) {
+            name = "Tetrahedron";
+            sidesCount = 6;
+            numOfVertices = 4;
+            numFaces = 4;
+            facesPerVertex = 3;  
+            sidesPerFace = 3;     
+            updateProperties();
+        }
+    
+        // Встановлення довжини ребра
+        void setSideLength(double val) override {
+            sideLength = max(0.0, val);
+            updateProperties(); // Перерахунок властивостей
+        }
+    
+        // Встановлення площі і розрахунок сторони на її основі
+        void setArea(double val) override {
+            if (val >= 0) setSideLength(sqrt(val / sqrt(3)));
+        }
+    
+        // Встановлення об'єму і розрахунок сторони на його основі
+        void setVolume(double val) override {
+            if (val >= 0) setSideLength(cbrt((6 * val) / sqrt(2)));
+        }
+    
+        // Встановлення вписаного радіуса
+        void setInscribedRadius(double val) override {
+            if (val >= 0) setSideLength(12 * val / sqrt(6));
+        }
+    
+        // Встановлення описаного радіуса
+        void setDescribedRadius(double val) override {
+            if (val >= 0) setSideLength(4 * val / sqrt(6));
+        }
+    
+        // Отримати об'єкт грані (рівносторонній трикутник)
+        unique_ptr<FlatShape> getFaceShape() const override {
+            return unique_ptr<FlatShape>(new EquilateralTriangle(sideLength));
+        }
+    
+private:
+        void updateProperties() {
+            area = sqrt(3) * pow(sideLength, 2);
+            volume = pow(sideLength, 3) / (6 * sqrt(2));
+            radiusInscribed = sideLength * sqrt(6) / 12;
+            radiusDescribed = sideLength * sqrt(6) / 4;
+        }
+};    
+
+class Dodecahedron : public VolumeShape {
+public:
+        Dodecahedron(double length) : VolumeShape(length) {
+            name = "Dodecahedron";
+            sidesCount = 30;
+            numOfVertices = 20;
+            numFaces = 12; 
+            facesPerVertex = 3;
+            sidesPerFace = 5; 
+            updateProperties();
+        }
+        
+        void setSideLength(double val) override {
+            sideLength = max(0.0, val);
+            updateProperties();
+        }
+        
+        // Встановлення площі і перерахунок довжини сторони
+        void setArea(double val) override {
+            if (val >= 0) setSideLength(sqrt(val / (3 * sqrt(25 + 10 * sqrt(5)))));
+        }
+        
+        // Встановлення об'єму і перерахунок довжини сторони
+        void setVolume(double val) override {
+            if (val >= 0) setSideLength(cbrt((4 * val) / (15 + 7 * sqrt(5))));
+        }
+        
+        // Встановлення вписаного радіуса
+        void setInscribedRadius(double val) override {
+            if (val >= 0) setSideLength(val * 20 / sqrt(250 + 110 * sqrt(5)));
+        }
+        
+        // Встановлення описаного радіуса
+        void setDescribedRadius(double val) override {
+            if (val >= 0) setSideLength(4 * val / (sqrt(3) * (1 + sqrt(5))));
+        }
+        
+        // Отримати об'єкт грані (правильний п’ятикутник)
+        unique_ptr<FlatShape> getFaceShape() const override {
+            return unique_ptr<FlatShape>(new RegularPentagon(sideLength));
+        }
+        
+private:
+        void updateProperties() {
+            area = 3 * sqrt(25 + 10 * sqrt(5)) * pow(sideLength, 2);
+            volume = (15 + 7 * sqrt(5)) / 4 * pow(sideLength, 3);
+            radiusInscribed = sideLength * sqrt(250 + 110 * sqrt(5)) / 20;
+            radiusDescribed = sideLength * (sqrt(3) * (1 + sqrt(5)) / 4);
+        }
+};
+        
+
+class Icosahedron : public VolumeShape {
+public:
+        Icosahedron(double length) : VolumeShape(length) {
+            name = "Icosahedron";
+            sidesCount = 30; 
+            numOfVertices = 12; 
+            numFaces = 20;  
+            facesPerVertex = 5;
+            sidesPerFace = 3;  
+            updateProperties();
+        }
+    
+        void setSideLength(double val) override {
+            sideLength = max(0.0, val);
+            updateProperties();
+        }
+    
+        // Встановлення площі і розрахунок сторони
+        void setArea(double val) override {
+            if (val >= 0) setSideLength(sqrt(val / (5 * sqrt(3))));
+        }
+    
+        // Встановлення об'єму
+        void setVolume(double val) override {
+            if (val >= 0) setSideLength(cbrt((12 * val) / (5 * (3 + sqrt(5)))));
+        }
+    
+        // Встановлення вписаного радіуса
+        void setInscribedRadius(double val) override {
+            if (val >= 0) setSideLength(val * 12 / (sqrt(3) * (3 + sqrt(5))));
+        }
+    
+        // Встановлення описаного радіуса
+        void setDescribedRadius(double val) override {
+            if (val >= 0) setSideLength(val * 4 / sqrt(10 + 2 * sqrt(5)));
+        }
+    
+        // Отримати об'єкт грані (рівносторонній трикутник)
+        unique_ptr<FlatShape> getFaceShape() const override {
+            return unique_ptr<FlatShape>(new EquilateralTriangle(sideLength));
+        }
+    
+private:
+        void updateProperties() {
+            area = 5 * sqrt(3) * pow(sideLength, 2);
+            volume = (5 * (3 + sqrt(5)) / 12) * pow(sideLength, 3);
+            radiusInscribed = sideLength * sqrt(3) * (3 + sqrt(5)) / 12;
+            radiusDescribed = sideLength * sqrt(10 + 2 * sqrt(5)) / 4;
+        }
+};       
+
+// Опрацювання команди користувача
+void processShape(unique_ptr<Shape> shape) {
+    cout << "\nCreated shape:\n" << shape->toString() << endl;
+
+    string command;
+    double value;
+
+    while (true) {
+        cout << "\nEnter command (or 'help' for options): ";
+        cin >> command;
+
+        if (command == "help") {
+            // Вивід довідки
+            cout << "\nAvailable commands:\n"
+                 << "setSide <value>\nsetArea <value>\nsetPerimeter <value>\n"
+                 << "setVolume <value>\nsetInscribed <value>\nsetDescribed <value>\n"
+                 << "getFace\nexit\n";
+            continue;
+        }
+
+        if (command == "exit") break; // Вихід з циклу
+
+        if (command == "getFace") {
+            // Якщо 3D фігура — показати її грань
+            if (auto volumeShape = dynamic_cast<VolumeShape*>(shape.get())) {
+                auto face = volumeShape->getFaceShape();
+                cout << "Face shape:\n" << face->toString() << endl;
+            } else {
+                cout << "Not a 3D shape!" << endl;
+            }
+            continue;
+        }
+
+        cin >> value; // Зчитування числового параметра
+
+        // Визначення команди користувача
+        if (command == "setSide") shape->setSideLength(value);
+        else if (command == "setArea") shape->setArea(value);
+        else if (command == "setPerimeter") {
+            if (auto flatShape = dynamic_cast<FlatShape*>(shape.get())) {
+                flatShape->setPerimeter(value);
+            } else {
+                cout << "Not a 2D shape!" << endl;
+            }
+        }
+        else if (command == "setVolume") {
+            if (auto volumeShape = dynamic_cast<VolumeShape*>(shape.get())) {
+                volumeShape->setVolume(value);
+            } else {
+                cout << "Not a 3D shape!" << endl;
+            }
+        }
+        else if (command == "setInscribed") shape->setInscribedRadius(value);
+        else if (command == "setDescribed") shape->setDescribedRadius(value);
+
+        // Показати оновлену інформацію
+        cout << "Updated shape:\n" << shape->toString() << endl;
+    }
+}
+
+// Головна функція
+int main() {
+    cout << "Shape Creator\nAvailable shapes:\n"
+         << "2D: square, triangle, pentagon, hexagon, circle, polygon\n"
+         << "3D: cube, tetrahedron, octahedron, dodecahedron, sphere\n"
+         << "Enter 'exit' to quit\n";
+
+    string shapeType;
+    double size;
+
+    while (true) {
+        cout << "\nEnter shape type and size: ";
+        cin >> shapeType;
+
+        if (shapeType == "exit") break;
+
+        cin >> size;
+
+        unique_ptr<Shape> shape;
+
+        // Створення фігури за введеним типом
+        if (shapeType == "square") shape.reset(new Rectangle(size));
+        else if (shapeType == "triangle") shape.reset(new EquilateralTriangle(size));
+        else if (shapeType == "hexagon") shape.reset(new RegularHexagon(size));
+        else if (shapeType == "cube") shape.reset(new Cube(size));
+        else if (shapeType == "sphere") shape.reset(new Sphere(size));
+        else if (shapeType == "octahedron") shape.reset(new Octahedron(size));
+        else if (shapeType == "pentagon") shape.reset(new RegularPentagon(size));
+        else if (shapeType == "circle") shape.reset(new Circle(size));
+        else if (shapeType == "tetrahedron") shape.reset(new Tetrahedron(size));
+        else if (shapeType == "dodecahedron") shape.reset(new Dodecahedron(size));
+        else if (shapeType == "icosahedron") shape.reset(new Icosahedron(size));
+        else if (shapeType == "polygon") {
+            int sides;
+            cout << "Enter number of sides: ";
+            cin >> sides;
+            shape.reset(new RegularPolygon(size, sides));
+        }
+        
+        else {
+            cout << "Unknown shape type!" << endl;
+            continue;
+        }
+
+        // Запуск обробника команд для фігури
+        processShape(move(shape));
+    }
+
+    return 0;
+}
